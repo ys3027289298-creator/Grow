@@ -1,0 +1,10 @@
+{
+  "name": "zero-g-theater",
+  "version": "1.0.0",
+  "private": true,
+  "description": "失重剧院：终幕排演 —— 浏览器养成类游戏",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}

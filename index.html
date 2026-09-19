@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>失重剧院：终幕排演</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- 主菜单 -->
+    <section id="screen-menu" class="screen">
+      <div class="menu-card">
+        <div class="orbit"><span class="sat">🛰️</span><span class="sat s2">🎭</span><span class="planet">🌑</span></div>
+        <h1 class="game-title">失重剧院</h1>
+        <div class="subtitle">终幕排演 · ZERO-G THEATER</div>
+        <p class="menu-tag">近地轨道 · 旧剧院能源倒计时 <b>10 天</b> · 带你的小队完成最后一场演出</p>
+        <div class="menu-btns">
+          <button class="btn primary" id="btn-new">🎬 开始游戏</button>
+          <button class="btn" id="btn-continue">📂 继续游戏</button>
+          <button class="btn danger" id="btn-restart">♻️ 重新开始</button>
+          <button class="btn" id="btn-settings">⚙️ 设置</button>
+        </div>
+        <div class="menu-foot">
+          <button class="link" id="btn-help">操作说明与推荐路线</button>
+          <button class="link" id="btn-events-log-menu">事件记录</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 游戏主界面 -->
+    <section id="screen-game" class="screen hidden">
+      <header class="topbar">
+        <div class="brand"><span>🎭</span><b>失重剧院</b><small id="phase-label">晨间安排</small></div>
+        <div class="hud">
+          <div class="hud-item" title="游戏日"><i>📅</i><span>第 <b id="hud-day">1</b>/10 天</span></div>
+          <div class="hud-item" title="今日剩余行动点"><i>🎟️</i><span>行动 <b id="hud-ap">4</b></span></div>
+          <div class="hud-item" title="能源"><i>⚡</i><span id="hud-energy">40</span></div>
+          <div class="hud-item" title="零件"><i>🔩</i><span id="hud-parts">30</span></div>
+          <div class="hud-item" title="资金"><i>💰</i><span id="hud-funds">120</span></div>
+          <div class="hud-item wide" title="排练进度"><i>🎬</i><div class="bar"><i id="bar-rehearsal"></i></div></div>
+          <div class="hud-item wide" title="观众期待值"><i>🎪</i><div class="bar hype"><i id="bar-hype"></i></div></div>
+          <div class="hud-item" title="剧院综合状态"><i>🏛️</i><span id="hud-status" class="status-ok">正常</span></div>
+        </div>
+        <div class="top-actions">
+          <button class="btn small" id="btn-save">💾 保存</button>
+          <button class="btn small" id="btn-pause">⏸ 暂停</button>
+          <button class="btn small" id="btn-menu">主菜单</button>
+        </div>
+      </header>
+
+      <div class="layout">
+        <!-- 左：剧院地图 -->
+        <aside class="panel map-panel">
+          <h3>剧院地图</h3>
+          <div id="map-grid" class="map-grid"></div>
+          <div id="loc-info" class="loc-info"></div>
+          <h3 class="mt">剧院设备</h3>
+          <div id="device-list" class="device-list"></div>
+        </aside>
+
+        <!-- 中：场景与行动 -->
+        <main class="panel scene-panel">
+          <div id="scene-view" class="scene-view"></div>
+          <div id="action-list" class="action-list"></div>
+          <div id="member-pick" class="member-pick hidden"></div>
+          <div class="day-controls">
+            <button class="btn ghost" id="btn-event-log">📜 事件记录</button>
+            <button class="btn primary" id="btn-night">🌙 结束今天（夜间总结）</button>
+          </div>
+        </main>
+
+        <!-- 右：成员 -->
+        <aside class="panel crew-panel">
+          <h3>剧团成员 <small id="crew-hint">点击查看详情 / 安排</small></h3>
+          <div id="crew-list" class="crew-list"></div>
+          <h3 class="mt">当前目标</h3>
+          <ul id="goal-list" class="goal-list"></ul>
+        </aside>
+      </div>
+
+      <!-- 底部消息流 -->
+      <div id="toast-zone" class="toast-zone"></div>
+      <div id="log-ticker" class="log-ticker"></div>
+    </section>
+  </div>
+
+<!-- 模态框容器 -->
+<div id="modal-root"></div>
+<div id="mg-overlay" class="mg-overlay" style="display:none"></div>
+
+<script type="module" src="js/main.mjs"></script>
+</body>
+</html>

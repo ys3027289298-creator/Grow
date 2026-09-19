@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8" />
+<pre id="out">running</pre>
+<iframe id="fr" src="../?autostart=1" style="width:1500px;height:950px"></iframe>
+<script type="module">
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+await sleep(800);
+const d = document.getElementById('fr').contentDocument;
+const $ = s => d.querySelector(s);
+const $$ = s => [...d.querySelectorAll(s)];
+
+// 进排练室 → 台词训练 → 选林
+$$('.map-cell').find(c => c.textContent.includes('排练室')).click();
+await sleep(100);
+$$('.act-card').find(c => c.textContent.includes('台词训练')).click();
+await sleep(100);
+$$('#pick-grid button').find(b => b.textContent.includes('林')).click();
+await sleep(300);
+
+// 按台词典范顺序（灯亮了请别让它熄灭）点字
+const canon = ['灯', '亮', '了', '请', '别', '让', '它'];
+let rounds = 0;
+while ($$('#mg-overlay')[0].style.display !== 'none' && rounds < 12) {
+  const filled = $$('.mg-slot.filled').length;
+  const chips = $$('.mg-chips .chip').filter(b => !b.disabled);
+  const btn = chips.find(b => b.textContent === canon[filled]) || chips[0];
+  if (!btn) break;
+  btn.click();
+  rounds++;
+  await sleep(90);
+}
+await sleep(700);
+
+const result = {
+  overlayClosed: $('#mg-overlay').style.display === 'none',
+  ap: $('#hud-ap').textContent,
+  energy: $('#hud-energy').textContent,
+  toasts: $$('.toast').map(t => t.textContent),
+  ticker: $('#log-ticker').textContent
+};
+document.getElementById('out').textContent = JSON.stringify(result, null, 1);
+</script>

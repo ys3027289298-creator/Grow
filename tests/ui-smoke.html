@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8" />
+<pre id="out">running</pre>
+<iframe id="fr" src="../?autostart=1" style="width:1500px;height:950px"></iframe>
+<script type="module">
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+await sleep(800);
+const d = document.getElementById('fr').contentDocument;
+const $ = s => d.querySelector(s);
+const $$ = s => [...d.querySelectorAll(s)];
+const smoke = {
+  gameVisible: !$('#screen-game').classList.contains('hidden'),
+  day: $('#hud-day').textContent,
+  mapCells: $$('.map-cell').length,
+  crewCards: $$('.crew-card').length,
+  stageActions: $$('.act-card').length,
+  deviceRows: $$('.dev-row').length,
+  goals: $$('#goal-list li').length
+};
+// 切换到排练室，行动列表应变化
+$$('.map-cell').find(c => c.textContent.includes('排练室')).click();
+await sleep(100);
+smoke.rehearsalActions = $$('.act-card').map(a => a.querySelector('b').textContent);
+// 打开成员详情弹窗
+$$('.crew-card')[0].click();
+await sleep(100);
+smoke.memberModal = !!d.querySelector('.modal h2');
+document.getElementById('out').textContent = JSON.stringify(smoke, null, 1);
+</script>

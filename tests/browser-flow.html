@@ -1,0 +1,108 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>browser flow</title>
+<pre id="out">running…</pre>
+<script type="module">
+import { createState, TRAITS } from '../js/data.mjs';
+import { resolveTraining, doSimpleActivity, nightlySummary, startNextDay } from '../js/engine-actions.mjs';
+import { resolveEvent, EVENTS, applyDueEffects } from '../js/engine-events.mjs';
+import { completeStory, nextStory, checkUnlocks } from '../js/engine-story.mjs';
+import { defaultLineup, createFinale, resolveCue, FINALE_PHASES, computeEnding } from '../js/engine-finale.mjs';
+import { saveGame, loadGame, hasSave } from '../js/engine-save.mjs';
+
+const out = [];
+const log = (...a) => out.push(a.join(' '));
+
+function buff(s) {
+  s.resources.rehearsal = 100; s.resources.hype = 100; s.resources.parts = 200;
+  s.resources.funds = 300; s.resources.props = 100;
+  for (const d of Object.values(s.devices)) d.integrity = 100;
+  for (const m of Object.values(s.members)) {
+    for (const k of Object.keys(m.stats)) m.stats[k] = 10;
+    m.fatigue = 0; m.stress = 0; m.trust = 100;
+  }
+  for (const k of Object.keys(s.relations)) s.relations[k] = 100;
+  s.flags.auroraReady = true; s.flags.understudyReady = true;
+  s.flags.vegaFinaleReady = true; s.flags.bobFinaleReady = true;
+  s.flags.kaiFinaleReady = true; s.flags.linFinaleReady = true;
+}
+
+// ---- 成功流程：9 天真实培养（训练消耗资源、触发事件、剧情、夜间总结）----
+{
+  const s = createState();
+  saveGame(s, 'auto');
+  const plan = [
+    ['vega', 'talk'], ['bob', 'fixQuick'],
+    ['lin', 'lines'], ['kai', 'react'], ['vega', 'light'], ['bob', 'repair'],
+    ['lin', 'lines'], ['kai', 'rhythm'], ['vega', 'light'], ['bob', 'repair'],
+    ['lin', 'team', 'kai'], ['vega', 'light'], ['bob', 'repair'], ['kai', 'gig'],
+    ['lin', 'lines'], ['vega', 'light'], ['bob', 'repair'], ['kai', 'react'],
+    ['lin', 'team', 'kai'], ['vega', 'light'], ['bob', 'repair'], ['kai', 'preview'],
+    ['lin', 'lines'], ['vega', 'light'], ['bob', 'rest'], ['kai', 'react'],
+    ['lin', 'lines'], ['vega', 'light'], ['bob', 'repair'], ['kai', 'rhythm'],
+    ['lin', 'team', 'kai'], ['vega', 'rest'], ['bob', 'repair'], ['kai', 'preview']
+  ];
+  let pi = 0;
+  for (let day = 1; day <= 9; day++) {
+    s.day = day;
+    // 每天处理一个事件：选择第一个可用项
+    const ev = EVENTS[(day - 1) % EVENTS.length];
+    const idx = ev.choices.findIndex(c => !c.when || c.when(s));
+    resolveEvent(s, ev, idx >= 0 ? idx : ev.choices.length - 1);
+    // 触发可触发的剧情
+    for (const id of Object.keys(TRAITS)) {
+      const st = nextStory(s, id);
+      if (st) completeStory(s, id, st, 0);
+    }
+    // 安排最多 4 个行动
+    let guard = 0;
+    while (s.ap > 0 && guard++ < 6 && pi < plan.length) {
+      const [who, act, partner] = plan[pi++];
+      s.resources.energy = Math.max(s.resources.energy, 40);
+      s.resources.parts = Math.max(s.resources.parts, 50);
+      if (act === 'talk' || act === 'gig' || act === 'rest' || act.startsWith('shop')) {
+        doSimpleActivity(s, who, act);
+      } else {
+        resolveTraining(s, who, act, 0.95, partner);
+      }
+    }
+    nightlySummary(s);
+    applyDueEffects(s);
+    if (day < 9) startNextDay(s);
+    checkUnlocks(s);
+  }
+  buff(s); // 模拟玩家培养到位（属性也已在循环中真实成长）
+  s.day = 10;
+  createFinale(s, defaultLineup(s));
+  for (let i = 0; i < FINALE_PHASES.length; i++) {
+    s.finale.step = i + 1;
+    resolveCue(s, 1);
+  }
+  const r = computeEnding(s);
+  log('SUCCESS_RUN', r.endingId, r.total, 'cues', r.successCount + '/3');
+  log('SAVE_ROUNDTRIP', hasSave() ? (loadGame('auto').state.day === 1 ? 'ok-new' : 'ok') : 'fail');
+}
+
+// ---- 失败流程：不培养、全员过载、现场全失误 ----
+{
+  const s = createState();
+  s.resources.rehearsal = 5; s.resources.hype = 8; s.resources.props = 10;
+  for (const d of Object.values(s.devices)) d.integrity = 12;
+  for (const m of Object.values(s.members)) {
+    for (const k of Object.keys(m.stats)) m.stats[k] = 2;
+    m.fatigue = 95; m.stress = 90; m.trust = 10;
+  }
+  for (const k of Object.keys(s.relations)) s.relations[k] = 15;
+  s.day = 10;
+  createFinale(s, defaultLineup(s));
+  for (let i = 0; i < FINALE_PHASES.length; i++) {
+    s.finale.step = i + 1;
+    resolveCue(s, 0.05);
+  }
+  const r = computeEnding(s);
+  log('FAIL_RUN', r.endingId, r.total, 'reasons', r.reasons.length);
+}
+
+document.getElementById('out').textContent = out.join('\n');
+window.__FLOW_RESULT__ = out.join('|');
+</script>
