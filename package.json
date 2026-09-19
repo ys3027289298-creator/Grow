@@ -1,0 +1,12 @@
+{
+  "name": "zero-g-theater-final-rehearsal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "《失重剧院：终幕排演》浏览器养成游戏",
+  "type": "module",
+  "scripts": {
+    "start": "node --watch server.js",
+    "serve": "node server.js",
+    "test": "node --test"
+  }
+}
