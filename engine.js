@@ -21,7 +21,9 @@ locations:{stage:{name:'主舞台',unlocked:true,closed:false},backstage:{name:'
 log:[],eventLog:[],flags:{introSeen:false,eventDoneToday:false,sponsorLeft:false,rewrite:false,earlyAudience:false,signalStorm:0,overheat:0,pendingAbsence:false,nightAccident:false},activeEvent:null,performance:null,ending:null,ended:false,
 stats:{workCount:0,trainingCount:0,failures:0,rehearsals:0,repairs:0,keyChoices:[]}};}
 export function adjustMember(m,c){for(const[k,v]of Object.entries(c)){if(k==='injured')m.injured=!!v;else if(STAT_KEYS.includes(k)||k==='fatigue'||k==='stress')m[k]=clamp(m[k]+v);else if(k==='xp')m.xp+=v;}}
-export function adjustResources(s,c){for(const[k,v]of Object.entries(c))s.resources[k]=clamp(s.resources[k]+v,0,k==='credits'?999:200);}
+export const RESOURCE_LIMITS={energy:[0,200],parts:[0,200],credits:[0,999],rehearsalTime:[0,200],props:[0,200],expectation:[0,200]};
+export function normalizeResources(s){if(!s.resources||typeof s.resources!=='object')s.resources={};for(const[k,[min,max]]of Object.entries(RESOURCE_LIMITS)){const v=s.resources[k];s.resources[k]=clamp(typeof v==='number'&&Number.isFinite(v)?v:0,min,max);}return s.resources;}
+export function adjustResources(s,c){const r=normalizeResources(s);for(const[k,v]of Object.entries(c||{})){const lim=RESOURCE_LIMITS[k];if(!lim||typeof v!=='number'||!Number.isFinite(v))continue;r[k]=clamp(r[k]+v,lim[0],lim[1]);}return r;}
 export function adjustDevice(s,id,v){const d=s.devices[id];if(!d)return;d.status=clamp(d.status+v);d.damaged=d.status<25;if(id==='power'&&d.status<30){s.locations.lighting.closed=true;s.flags.signalStorm=Math.max(s.flags.signalStorm,1);}if(id==='life'&&d.status>=35)s.locations.stage.closed=false;}
 export function unlockChecks(s){s.locations.lighting.unlocked||=s.devices.power.status>=35||getMember(s,'mika').story>=1;s.locations.repair.unlocked||=s.day>=2||getMember(s,'gu').story>=1;s.locations.audience.unlocked||=s.day>=3||s.resources.expectation>=55;}
 export function moveLocation(s,id){const l=s.locations[id];if(!l)return{ok:false,reason:'区域不存在'};if(!l.unlocked)return{ok:false,reason:'区域尚未解锁'};if(l.closed)return{ok:false,reason:'区域因安全事故关闭'};s.location=id;return{ok:true};}
@@ -54,38 +56,57 @@ for(const r of rules){const m=getMember(s,r.id);if(m.story===r.n-1&&r.test(m,s))
 }
 export const EVENT_DEFS={
 blackout:{title:'舞台断电',text:'母线在无重力走廊里闪出火花，灯光室即将离线。',options:[
-{id:'manual',label:'手动切换应急母线',need:s=>s.devices.console.status>=35&&s.resources.parts>=1,run:s=>{s.resources.parts--;adjustDevice(s,'power',18);adjustDevice(s,'console',-8);getMember(s,'gu').fatigue=clamp(getMember(s,'gu').fatigue+14);return'顾壑稳住母线，灯光室保持开放。';}},
-{id:'cut',label:'削减非必要照明',run:s=>{adjustResources(s,{energy:14,expectation:-9});s.devices.lights.status=clamp(s.devices.lights.status-8);return'能源保住了，但观众期待下降。';}}]},
+{id:'manual',label:'手动切换应急母线',need:s=>s.devices.console.status>=35&&s.resources.parts>=1,run:s=>{adjustResources(s,{parts:-1});adjustDevice(s,'power',18);adjustDevice(s,'console',-8);getMember(s,'gu').fatigue=clamp(getMember(s,'gu').fatigue+14);return'顾壑稳住母线，灯光室保持开放。';}},
+{id:'cut',label:'削减非必要照明',run:s=>{adjustResources(s,{energy:14,expectation:-9});adjustDevice(s,'lights',-8);return'能源保住了，但观众期待下降。';}}]},
 fight:{title:'成员争执',text:'林杳认为晴文擅自改词，晴文则觉得自己总被当作备份。',options:[
 {id:'mediate',label:'让米卡从中调解',need:s=>getRelationship(s,'lin','qing')>=35&&getMember(s,'mika').trust>=50,run:s=>{addRelationship(s,'lin','qing',12);adjustMember(getMember(s,'lin'),{stress:-8});adjustMember(getMember(s,'qing'),{trust:7});return'两人决定把即兴段落明确分工。';}},
 {id:'side',label:'维持原剧本',run:s=>{addRelationship(s,'lin','qing',-10);adjustMember(getMember(s,'qing'),{stress:14,trust:-6});adjustResources(s,{props:5});return'纪律恢复，但晴文的积极性受挫。';}}]},
 props:{title:'道具损坏',text:'磁扣失效，关键月面仪在后台漂浮散开。',options:[
-{id:'repair',label:'连夜重制道具',need:s=>s.resources.parts>=2&&s.resources.energy>=6,run:s=>{s.resources.parts-=2;s.resources.energy-=6;s.resources.props=clamp(s.resources.props+18);s.members.forEach(m=>adjustMember(m,{fatigue:6}));return'月面仪更坚固，道具完整度提升。';}},
-{id:'mime',label:'改成无实物表演',need:s=>getMember(s,'lin').acting>=75,run:s=>{adjustMember(getMember(s,'lin'),{acting:4,stress:8});s.resources.expectation+=6;s.resources.props=clamp(s.resources.props-10);return'缺憾变成独特的表演风格。';}}]},
+{id:'repair',label:'连夜重制道具',need:s=>s.resources.parts>=2&&s.resources.energy>=6,run:s=>{adjustResources(s,{parts:-2,energy:-6,props:18});s.members.forEach(m=>adjustMember(m,{fatigue:6}));return'月面仪更坚固，道具完整度提升。';}},
+{id:'mime',label:'改成无实物表演',need:s=>getMember(s,'lin').acting>=75,run:s=>{adjustMember(getMember(s,'lin'),{acting:4,stress:8});adjustResources(s,{expectation:6,props:-10});return'缺憾变成独特的表演风格。';}}]},
 audience:{title:'观众提前入场',text:'接驳船提早抵达，观众已经透过气窗看向舞台。',options:[
-{id:'preview',label:'安排米卡展示灯光',need:s=>s.locations.lighting.unlocked&&s.devices.lights.status>=50,run:s=>{s.resources.energy-=7;adjustResources(s,{expectation:16});adjustMember(getMember(s,'mika'),{fatigue:10,trust:5});s.flags.earlyAudience=true;return'预演光秀让期待值大涨。';}},
+{id:'preview',label:'安排米卡展示灯光',need:s=>s.locations.lighting.unlocked&&s.devices.lights.status>=50,run:s=>{adjustResources(s,{energy:-7,expectation:16});adjustMember(getMember(s,'mika'),{fatigue:10,trust:5});s.flags.earlyAudience=true;return'预演光秀让期待值大涨。';}},
 {id:'delay',label:'请乘务组延迟入场',run:s=>{adjustResources(s,{credits:-15,expectation:-4});return'支付协调费，现场没有穿帮。';}}]},
 signal:{title:'外部信号干扰',text:'广告卫星反复切断控制台与灯轨的握手信号。',options:[
-{id:'shield',label:'制作屏蔽线圈',need:s=>getMember(s,'gu').tech>=75&&s.resources.parts>=1,run:s=>{s.resources.parts--;adjustDevice(s,'console',15);adjustMember(getMember(s,'gu'),{focus:4,fatigue:10});s.flags.signalStorm=0;return'屏蔽线圈生效，终幕操作更稳定。';}},
+{id:'shield',label:'制作屏蔽线圈',need:s=>getMember(s,'gu').tech>=75&&s.resources.parts>=1,run:s=>{adjustResources(s,{parts:-1});adjustDevice(s,'console',15);adjustMember(getMember(s,'gu'),{focus:4,fatigue:10});s.flags.signalStorm=0;return'屏蔽线圈生效，终幕操作更稳定。';}},
 {id:'ignore',label:'忽略干扰继续排练',run:s=>{s.flags.signalStorm=2;adjustDevice(s,'lights',-10);adjustResources(s,{rehearsalTime:1});return'干扰持续，灯光阵列留下隐患。';}}]},
 accident:{title:'排练事故',text:'升降台轻微抖动，晴文在空中失去平衡。',options:[
 {id:'catch',label:'让顾壑手动制动',need:s=>getMember(s,'gu').reaction>=50,run:s=>{adjustDevice(s,'lift',-6);adjustMember(getMember(s,'gu'),{fatigue:12,reaction:3,trust:6});return'制动成功，队伍更信任顾壑。';}},
-{id:'stop',label:'立刻停止排练',run:s=>{s.resources.rehearsalTime=clamp(s.resources.rehearsalTime-2);adjustMember(getMember(s,'qing'),{stress:-8});s.flags.nightAccident=true;return'安全优先，但损失两个排练小时。';}}]},
+{id:'stop',label:'立刻停止排练',run:s=>{adjustResources(s,{rehearsalTime:-2});adjustMember(getMember(s,'qing'),{stress:-8});s.flags.nightAccident=true;return'安全优先，但损失两个排练小时。';}}]},
 absence:{title:'临时演员缺席',text:'外借的轨道舞者因船班取消无法到场。',options:[
 {id:'qing',label:'让晴文顶替',need:s=>getMember(s,'qing').reaction>=70,run:s=>{adjustMember(getMember(s,'qing'),{acting:5,trust:8,stress:8});addRelationship(s,'lin','qing',6);s.flags.pendingAbsence=false;return'晴文获得真正的核心段落。';}},
-{id:'robot',label:'用机械臂替代',need:s=>s.resources.credits>=25,run:s=>{s.resources.credits-=25;adjustDevice(s,'lift',-8);s.resources.expectation-=3;return'机械臂能完成动作，却缺少人的温度。';}}]},
+{id:'robot',label:'用机械臂替代',need:s=>s.resources.credits>=25,run:s=>{adjustResources(s,{credits:-25,expectation:-3});adjustDevice(s,'lift',-8);return'机械臂能完成动作，却缺少人的温度。';}}]},
 overheat:{title:'设备过热',text:'灯轨散热器发出红色警报，继续使用可能烧毁。',options:[
-{id:'cool',label:'关闭设备降温',run:s=>{s.resources.energy-=4;s.actions=Math.max(0,s.actions-1);adjustDevice(s,'lights',12);s.flags.overheat=0;return'设备恢复，但占用一次行动。';}},
+{id:'cool',label:'关闭设备降温',run:s=>{adjustResources(s,{energy:-4});s.actions=Math.max(0,s.actions-1);adjustDevice(s,'lights',12);s.flags.overheat=0;return'设备恢复，但占用一次行动。';}},
 {id:'push',label:'冒险继续运行',need:s=>getMember(s,'mika').tech>=65,run:s=>{adjustDevice(s,'lights',-18);adjustResources(s,{expectation:8});s.flags.overheat=2;return'当天效果惊艳，但灯轨将在终幕出问题。';}}]},
 sponsor:{title:'赞助方撤资',text:'投资方认为剧院关停已成定局，要求提前终止赞助。',options:[
 {id:'convince',label:'播放排练片段谈判',need:s=>s.resources.expectation>=55,run:s=>{adjustResources(s,{credits:45,expectation:8});getMember(s,'lin').trust=clamp(getMember(s,'lin').trust+5);return'观众期待说服了赞助方。';}},
-{id:'crowd',label:'发起观众众筹',run:s=>{s.resources.credits+=22;s.flags.sponsorLeft=true;s.resources.energy=clamp(s.resources.energy-8);return'众筹不多，但剧团保住自主权。';}}]},
+{id:'crowd',label:'发起观众众筹',run:s=>{adjustResources(s,{credits:22,energy:-8});s.flags.sponsorLeft=true;return'众筹不多，但剧团保住自主权。';}}]},
 rewrite:{title:'剧本修改',text:'编剧从地面发来新结尾，要求终幕减少特效、强化人物和解。',options:[
 {id:'accept',label:'采纳新结尾',need:s=>getMember(s,'lin').acting>=70&&getRelationship(s,'lin','qing')>=45,run:s=>{s.flags.rewrite='accept';adjustMember(getMember(s,'lin'),{acting:4});adjustMember(getMember(s,'qing'),{trust:7});addRelationship(s,'lin','qing',8);return'新结尾给演员更多现场发挥空间。';}},
-{id:'keep',label:'保留原特效剧本',run:s=>{s.flags.rewrite='keep';s.resources.expectation+=7;s.resources.parts=clamp(s.resources.parts-1);return'场面更华丽，但终幕更依赖设备。';}}]}
+{id:'keep',label:'保留原特效剧本',run:s=>{s.flags.rewrite='keep';adjustResources(s,{expectation:7,parts:-1});return'场面更华丽，但终幕更依赖设备。';}}]}
 };
 export function maybeTriggerEvent(s,rng=Math.random){if(s.flags.eventDoneToday||s.day>=10)return null;const forced={1:'blackout',2:'fight',3:'props',4:'overheat',5:'sponsor',6:'signal',7:'accident',8:'absence',9:'rewrite'}[s.day];let id=forced;if(!forced||s.eventLog.some(e=>e.key===id))id=Object.keys(EVENT_DEFS)[Math.floor(rng()*Object.keys(EVENT_DEFS).length)];const def=EVENT_DEFS[id];s.activeEvent={id,...def};s.phase='event';return s.activeEvent;}
-export function resolveEvent(s,optionId){if(!s.activeEvent)return{ok:false,reason:'当前没有突发事件'};const option=s.activeEvent.options.find(o=>o.id===optionId);if(!option)return{ok:false,reason:'选项不存在'};if(option.need&&!option.need(s))return{ok:false,reason:'条件不足，无法选择'};const detail=option.run(s);s.flags.eventDoneToday=true;s.eventLog.push({day:s.day,type:'event',key:s.activeEvent.id,title:s.activeEvent.title,choice:option.label,detail});addLog(s,s.activeEvent.title,`${option.label}：${detail}`,'event');s.activeEvent=null;s.phase='night';checkPersonalStories(s);return{ok:true,detail};}
+export function resolveEvent(s,optionId){
+if(!s.activeEvent)return{ok:false,reason:'当前没有突发事件'};
+const eventId=s.activeEvent.id,def=EVENT_DEFS[eventId];
+if(!def)return{ok:false,reason:'事件数据异常'};
+const pool=Array.isArray(s.activeEvent.options)?s.activeEvent.options:def.options;
+let option=pool.find(o=>o&&o.id===optionId);
+if(option&&typeof option.run!=='function')option=def.options.find(o=>o.id===optionId);
+if(!option||typeof option.run!=='function')return{ok:false,reason:'选项不存在'};
+const eventTitle=s.activeEvent.title??def.title,activeRef=s.activeEvent,snapshot=clone({...s,activeEvent:null});
+const rollback=()=>{for(const k of Object.keys(s))delete s[k];Object.assign(s,snapshot);s.activeEvent=activeRef;};
+try{
+normalizeResources(s);
+if(option.need&&!option.need(s)){rollback();return{ok:false,reason:'条件不足，无法选择'};}
+const detail=option.run(s)??'';
+normalizeResources(s);
+s.flags.eventDoneToday=true;
+if(!s.eventLog.some(e=>e.type==='event'&&e.key===eventId&&e.day===s.day)){s.eventLog.push({day:s.day,type:'event',key:eventId,title:eventTitle,choice:option.label,detail});addLog(s,eventTitle,`${option.label}：${detail}`,'event');}
+s.activeEvent=null;s.phase='night';checkPersonalStories(s);normalizeResources(s);
+return{ok:true,detail};
+}catch{rollback();return{ok:false,reason:'事件结算异常，已回滚全部状态'};}}
 export function endDay(s){if(s.day>=10)return startPerformance(s);s.phase='night';let injuries=s.members.filter(m=>m.injured).length;s.members.forEach(m=>{if(m.assignment==='低强度休息'){adjustMember(m,{fatigue:-8,stress:-5});}else{adjustMember(m,{fatigue:s.flags.signalStorm?4:2,stress:s.flags.overheat?3:1});}if(m.fatigue>85&&!m.injured&&Math.random()>.55){m.injured=true;injuries++;addLog(s,'累积疲劳受伤',`${m.name}因连续高压安排受轻伤。`,'danger');}m.assignment='待命';});
 Object.entries(s.devices).forEach(([id,d])=>{d.status=clamp(d.status-(id==='life'?1:id==='power'?4:3));d.damaged=d.status<25;});if(s.devices.power.status<30)s.locations.lighting.closed=true;if(s.flags.signalStorm>0)s.flags.signalStorm--;if(s.flags.overheat>0)s.flags.overheat--;
 adjustResources(s,{energy:18,parts:s.day%3===0?1:0,rehearsalTime:3,expectation:s.stats.rehearsals?1:-2});s.day++;s.actions=4;s.phase='morning';s.flags.eventDoneToday=false;unlockChecks(s);addLog(s,`第 ${s.day} 天晨间安排`,'能源重新配给，剧院继续漂流。','info');if(s.day===10)return startPerformance(s);return{ok:true};}
