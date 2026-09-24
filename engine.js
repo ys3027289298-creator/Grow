@@ -91,7 +91,22 @@ Object.entries(s.devices).forEach(([id,d])=>{d.status=clamp(d.status-(id==='life
 adjustResources(s,{energy:18,parts:s.day%3===0?1:0,rehearsalTime:3,expectation:s.stats.rehearsals?1:-2});s.day++;s.actions=4;s.phase='morning';s.flags.eventDoneToday=false;unlockChecks(s);addLog(s,`第 ${s.day} 天晨间安排`,'能源重新配给，剧院继续漂流。','info');if(s.day===10)return startPerformance(s);return{ok:true};}
 export function teamLevel(s){const avg=k=>s.members.reduce((a,m)=>a+m[k],0)/4;return{acting:avg('acting'),rhythm:avg('rhythm'),focus:avg('focus'),stamina:avg('stamina'),tech:avg('tech'),reaction:avg('reaction'),trust:avg('trust'),fatigue:avg('fatigue'),stress:avg('stress')};}
 export function startPerformance(s){s.day=10;s.phase='performance';s.location='stage';const rels=Object.values(s.relationships);const tl=teamLevel(s);const equipment=Object.values(s.devices).reduce((a,d)=>a+d.status,0)/Object.keys(s.devices).length;s.performance={stage:'prep',cue:0,score:0,operations:[],setup:null,base:Math.round(tl.acting*.18+tl.rhythm*.1+tl.focus*.1+tl.tech*.14+tl.reaction*.14+tl.trust*.16+equipment*.12+s.resources.expectation*.1-(tl.fatigue*.08+tl.stress*.05)+rels.reduce((a,b)=>a+b,0)/rels.length*.03)};addLog(s,'最终演出开始','确认站位、设备、灯光顺序和备用方案。','event');return s.performance;}
-export function confirmPerformanceSetup(s,setup={}){if(!s.performance||s.performance.stage!=='prep')return{ok:false,reason:'现在不能修改演出方案'};const required=['lead','understudy','engineer','firstLight','backup'];const missing=required.filter(k=>!setup[k]);if(missing.length)return{ok:false,reason:'方案不完整'};s.performance.setup=setup;s.performance.stage='cue';s.performance.cue=1;const synergy=(getRelationship(s,setup.lead,setup.understudy)>=55?8:0)+(getRelationship(s,setup.engineer,setup.firstLight)>=50?6:0);s.performance.score+=synergy;addLog(s,'演出方案锁定',`默契加成为 ${synergy}。`,'success');return{ok:true,synergy};}
+export const PERFORMANCE_SLOTS=['lead','understudy','engineer','firstLight'];
+export const PERFORMANCE_SLOT_LABELS={lead:'主演',understudy:'替补',engineer:'机械设备',firstLight:'第一灯光'};
+export const PERFORMANCE_BACKUPS=['battery','human','none'];
+export function validatePerformanceSetup(s,setup){
+  if(!setup||typeof setup!=='object'||Array.isArray(setup))return{ok:false,reason:'演出方案必须是对象'};
+  for(const k of PERFORMANCE_SLOTS){
+    const v=setup[k];
+    if(typeof v!=='string'||v.trim()==='')return{ok:false,reason:`方案缺少有效的${PERFORMANCE_SLOT_LABELS[k]}成员 ID`};
+    if(!getMember(s,v))return{ok:false,reason:`${PERFORMANCE_SLOT_LABELS[k]} ${v} 不是现有成员`};
+  }
+  if(typeof setup.backup!=='string'||!PERFORMANCE_BACKUPS.includes(setup.backup))return{ok:false,reason:'备用方案只能是 battery、human 或 none'};
+  if(new Set(PERFORMANCE_SLOTS.map(k=>setup[k])).size<PERFORMANCE_SLOTS.length)return{ok:false,reason:'四个岗位必须由四名不同成员承担'};
+  return{ok:true,value:Object.fromEntries([...PERFORMANCE_SLOTS.map(k=>[k,setup[k]]),['backup',setup.backup]])};
+}
+export function performanceSynergy(s,setup){return(getRelationship(s,setup.lead,setup.understudy)>=55?8:0)+(getRelationship(s,setup.engineer,setup.firstLight)>=50?6:0);}
+export function confirmPerformanceSetup(s,setup){if(!s.performance||s.performance.stage!=='prep')return{ok:false,reason:'现在不能修改演出方案'};const check=validatePerformanceSetup(s,setup);if(!check.ok)return check;const locked=Object.freeze({...check.value});s.performance.setup=locked;s.performance.stage='cue';s.performance.cue=1;const synergy=performanceSynergy(s,locked);s.performance.score+=synergy;addLog(s,'演出方案锁定',`默契加成为 ${synergy}。`,'success');return{ok:true,synergy};}
 export const PERFORMANCE_CUES=[
 {id:'opening',title:'第一次变化：开场前灯轨失准',options:[{id:'light',label:'按光谱手动追光',need:(s,c)=>getMember(s,c.setup.firstLight).tech>=60,score:(s,c)=>18+getMember(s,c.setup.firstLight).tech/8},{id:'spot',label:'改用单束应急追光',score:()=>9}]},
 {id:'lift',title:'第二次变化：升降台抖动',options:[{id:'brake',label:'手动制动并改走坡道',need:(s,c)=>s.devices.lift.status>=45||getMember(s,c.setup.engineer).route==='engineer',score:(s,c)=>18+getMember(s,c.setup.engineer).reaction/8},{id:'risk',label:'坚持使用升降台',score:s=>s.devices.lift.status<40?-12:6}]},
